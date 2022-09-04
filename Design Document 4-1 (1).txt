@@ -1,0 +1,418 @@
+                    +-------------------------+
+                    |           CS 439        |
+                    | PROJECT 4: FILE SYSTEMS |
+                    |      DESIGN DOCUMENT    |
+                    +-------------------------+
+
+
+The questions in this design document should reflect the design of the code you
+wrote for the project.  Your grade will reflect both the quality of your answer
+in this document and the quality of the design implementation in your code.  You
+may receive partial credit for answering questions for parts of the project that
+you did not get to implement, but you must indicate in your answer that there is
+no corresponding implementation, or you will not receive any credit.
+
+
+For each question, you should include both the name of the file(s), function
+name(s), and the line numbers where the relevant code may be found.
+
+
+These design documents should be completed individually.  Group members are
+welcome to use this document as a guide for design and are welcome to discuss
+the questions, but there should be no group notes or other sorts of copying of
+design documents.
+
+
+When you have completed your design document, submit it to the Canvas assignment
+Project 4 Design and Documentation.  ***Your submission must be a text file and
+each line must not extend past 80 characters.  In addition, your submission must
+contain all of the original material and not exceed 18,000 characters.  The
+character count will be measured using the Linux command wc.  (Note that rtf
+files are NOT text files.)
+
+
+---- Name ----
+
+
+>> Fill your name, UT EID, CS login, email address, and unique number:
+
+
+Name:Viren Velacheri
+EID:vv6898
+CS login:vtrain
+Email:viren.velacheri@utexas.edu
+Unique Number:50485
+
+
+
+
+Slip days used on this project:0
+
+
+---- GROUP ----
+
+
+>> Fill the names, UT EIDs, CS logins, email addresses, and unique numbers
+>> of your group members.  Also fill in each person's ranking on the 
+>> partner evaluation scale, as determined by you.
+
+
+Name1:Brock Moore
+EID1:bam4865
+CS login:bmoore
+Email:brockm2018@gmail.com
+Unique Number:50480
+Ranking (scale below):Excellent
+
+
+Name2:Jordan Wang
+EID2:jyw283
+CS login:jwang724
+Email:jordan.y.wang@gmail.com
+Unique Number:50475
+Ranking (scale below):Excellent
+
+
+Name3:Jasper Lin
+EID3:jl67987
+CS login:jasperl
+Email:jasperlin@utexas.edu
+Unique Number:50485
+Ranking (scale below):Excellent
+
+
+
+
+---- PARTNER EVALUATION SCALE ----
+
+
+>> Excellent: Consistently went above and beyond - tutored others, carried
+>> more than his/her fair share of the load.
+
+
+>> Very Good: Consistently did what he/she was supposed to do, very well
+>> prepared and cooperative.
+
+
+>> Satisfactory: Usually did what he/she was supposed to do, minimally
+>> prepared and cooperative.
+
+
+>> Marginal: Sometimes failed to show up and/or rarely prepared.
+
+
+>> Deficient: Often failed to show up and/or rarely prepared.
+
+
+>> Unsatisfactory: Consistently failed to show up and/or unprepared.
+
+
+>> Superficial: Practically no participation.
+
+
+>> No Show: No participation at all.
+
+
+
+
+
+
+
+
+---- PRELIMINARIES ----
+
+
+>> If you have any preliminary comments on your submission or notes for the
+>> TAs, give them here.
+
+
+>> Please cite any offline or online sources you consulted while
+>> preparing your submission, other than the Pintos documentation, course
+>> text, lecture notes, and course staff.
+
+
+                     INDEXED AND EXTENSIBLE FILES
+                     ============================
+
+
+---- DATA STRUCTURES ----
+
+
+>> A1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, `typedef', ‘#define’, or
+>> enumeration that was necessary for your indexed and extensible file
+>> implementation.  Identify the purpose of each in 25 words or less.
+
+In inode.c:
+/* The number of direct blocks */
+#define DIRECT_BLOCKS 100
+
+/* The number of indirect blocks */
+#define INDIRECT_BLOCKS 24
+
+/* The number of sector pointers in an indirect block */
+#define INDIRECT_POINTERS 128
+
+/* Commonly returned when data not found */
+#define NOT_FOUND -1
+
+/* On-disk inode.
+   Must be exactly BLOCK_SECTOR_SIZE bytes long. */
+struct inode_disk
+  {
+    int isdir; /* Used to determine whether inode is file or directory. */
+    off_t length; /* File size in bytes. */
+    unsigned magic; /* Magic number. */
+
+    block_sector_t direct_blocks[DIRECT_BLOCKS]; /* The Direct Blocks */
+    block_sector_t indirect[INDIRECT_BLOCKS]; /* The Indirect Blocks */
+    block_sector_t double_indirect; /* The one Double Indirect Block */
+  };
+
+>> A2: What is the maximum size of a file supported by your inode
+>> structure?  Show your work.
+
+# of direct blocks: 100
+# of indirect blocks: 24
+# of direct blocks pointed to by indirect blocks: (512/4) * 24 = 3072
+# of double indirect block(s): 1
+# of direct blocks pointed to be double indirect block: 128 * 128 * 1 = 16,384
+total # of direct blocks: 100 + 3072 + 16,384 = 19,556
+total # of bytes: 512 * 19,556 = 10,012,672 
+So the maximum file size is ~10 MB.
+
+---- SYNCHRONIZATION ----
+
+
+>> A3: Explain how your code avoids a race if two processes attempt to
+>> extend a file at the same time.
+
+We didn't implement this, but if we had more time, we were thinking that we
+could have just added/declared a lock inside the inode struct in inode.c
+Assuming that we named this lock inode_lock, whenever a process tries to 
+extend or grow the file, it would have to acquire this lock: 
+inode->inode_lock. This way, any other process that attempts to extend 
+the file, but can't as the lock has been acquired is blocked. To be exact,
+we would have added the lock acquire line at the beginning of our 
+file growth method (line 508) and then have the process release
+the lock right before any of the possible return statements so
+that way if something goes wrong or the allocation failed (line 545),
+the process won't leave the file growth method with lock as it 
+will release it, so the next process can use it. 
+
+>> A4: Suppose processes A and B both have file F open, both
+>> positioned at end-of-file.  If A reads and B writes F at the same
+>> time, A may read all, part, or none of what B writes.  However, A
+>> may not read data other than what B writes, e.g. if B writes
+>> nonzero data, A is not allowed to see all zeros.  Explain how your
+>> code avoids this race.
+
+This is something that we didn't exactly implement or consider. However,
+looking back, what we could have done is added a length variable in
+the inode struct like the one in the inode_disk struct (line 32). 
+The only difference would be that the length variable in the inode
+struct would store the actual readable length of the inode and 
+not just the allocated length of the inode. At the start of our 
+file growth method (line 507), both the inode->length and the 
+inode_disk->length would be the same. When process B starts
+extending the file, after acquiring inode->inode_lock, sectors 
+are being allocated like in lines 539 to 542. However, at this
+point, they are filled with zeros and it is only when they are writen back
+to disk like in lines 550-557 that the data would not be zero. Knowing
+this, whenever all the sectors have been allocated and written back to 
+disk like in lines 550-557, I would set the inode->length to offset 
+after the block write or whenever the data is written back to the disk
+that way the whenever process A reads what B is writing, it will
+always be the nonzero data that process B has written and process
+A will never be able to see the 0's.
+
+>> A5: Explain how your synchronization design provides "fairness".
+>> File access is "fair" if readers cannot indefinitely block writers
+>> or vice versa.  That is, one or many processes reading from a file
+>> cannot forever prevent another process from writing to the file, and
+>> one or many processes writing to a file cannot forever prevent
+>> another process from reading the file.
+
+We didn't exactly implement this as we were focusing on the last 
+couple of directory tests that we were failing. However, with more time,
+we would have only made that processes that needed to extend a file 
+would need to acquire a lock, specifically inode->inode_lock assuming
+that name of the lock is inode_lock. This means readers do not need
+to acquire any locks and will never get blocked. Block writers and 
+readers will never block one another. Only the writer extending the file
+can block other writers trying to do so. As mentioned in the above answer,
+readers would be able to still read all the nonzero data written by the
+writer as it is extending the file.
+
+
+
+
+
+
+
+---- RATIONALE ----
+
+
+>> A6: Is your file layout a multilevel indexed structure?  If so, why
+>> did you choose this particular combination of direct, indirect, and
+>> doubly indirect blocks?  If not, why did you choose an alternative
+>> file structure, and what advantages and disadvantages does your
+>> structure have, compared to a multilevel index?
+>> In your explanation, include at least two reasons to support your 
+>> choices.
+
+Our file layout is a multilevel indexed structure. The reason we chose
+to have 100 direct blocks instead of 10 like in FFS (Fast File System) is 
+because most of the files in the tests we were running were pretty 
+small and so we didn't think that we needed that much indirection. Based
+off our calculations, we realized that we needed at one double 
+indirection block for us to at least meet the 8 MB file limit. We didn't
+think that we needed more as that would be a waste of space. From
+since the number of unused block sectors we started off was with 125 
+and we just allocated 100 as direct blocks and 1 as a double indirection
+block, we allocated the remaining or 24 as single indirection blocks.
+We chose to do multilevel indexing because it can support not just
+small but even large files as well. It better supports file growth.
+It is also easier to implement as the code for allocating space 
+for both small and large files is much easier thanks to the use
+of indirection. Doing it with just direct blocks would be much harder.
+
+
+
+
+
+                            SUBDIRECTORIES
+                            ==============
+
+
+---- DATA STRUCTURES ----
+
+
+>> B1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, `typedef', ‘#define’, or
+>> enumeration that was necessary for your subdirectory 
+>> implementation.  Identify the purpose of each in 25 words or less.
+
+Added to struct thread:
+struct dir *cwd; /* The current working directory */
+
+---- ALGORITHMS ----
+
+
+>> B2: Describe your code for traversing a user-specified path.  How
+>> do traversals of absolute and relative paths differ?
+
+So after tokenizing the path name based on our get_path method in 
+filesys.c (lines 111-134), we get back this tokenized path name
+and if it is not NULL, we loop through the path. Looking back 
+we should have definitely created a helper method for this part 
+so the code would be more modular, but an example of us looping
+is lines 70-89. As you can see, while the next token in the path
+name is not NULL (line 71) and if the directory is not NULL, we find the 
+next directory in the path by the dir_lookup method (line 75). 
+If the inode is NULL or the method is not successful, we break
+(lines 76-79). If it is, we close the directory (line 81) and 
+open up the new one (line 83). The only difference between traversals
+of absolute and relative paths is that for relative paths, we start
+at the root (line 59) while for relative paths we start at the 
+current directory (lines 60-61).
+
+---- SYNCHRONIZATION ----
+
+
+>> B3: How do you prevent races on directory entries?  For example,
+>> only one of two simultaneous attempts to remove a single file
+>> should succeed, as should only one of two simultaneous attempts to
+>> create a file with the same name, and so on.
+
+We didn't implement this as we were first focused on passing the last 
+couple of directory tests that we were failing. However, with more time, 
+we probably would have added another lock to the inode struct in 
+inode.c (lines 49-56) and named it like dir_lock. Directory calls like
+add, remove, readdir, open, and lookup would be 
+synchronized by inode->dir_lock. This would avoid race
+conditions that could otherwise happen.
+
+
+>> B4: Does your implementation allow a directory to be removed if it
+>> is open by a process or if it is in use as a process's current
+>> working directory?  If so, what happens to that process's future
+>> file system operations?  If that’s not allowed, how do you
+>> prevent it?
+
+We didn't really go about trying to come up with an implementation for
+this. With that said, technically, with our current state of code,
+a directory is allowed to be removed even if it is open by a process 
+or even in use as a process's current working directory. With more time,
+to prevent this, in dir_remove in directory.c (lines 186-217), we could have
+added a simple check on the inode->open_cnt after the entry is looked up
+(lines 197-198) and after the inode is opened (line 201). If inode->open_cnt
+is greater than 0 or the file is opened in at least more than 1 place, then
+false would be returned and the directory would not be removed. In the case
+of preventing the removal of a current working directory of a process,
+we use a struct dir* in thread.h in the thread struct (line 110) that stores
+the current working directory for the process. This way for when like the
+path is a relative one, we can reopen it which increases the open_cnt by 1
+(like lines 329-300 for filesys.c). I guess the next thing we should have 
+implemented as that when the process exits like in process_exit in process.c
+(lines 160-212), we could have closed the current directory there via
+the dir_close method. This way we guarantee that the open_cnt of a
+directory being used as a current_working_directory is never 0. 
+
+
+
+---- RATIONALE ----
+
+
+>> B5: What type of variable/structure did you use to represent the 
+>> current directory of a process?   Why did you choose this 
+>> representation?  Give at least two reasons.
+
+We used a struct dir* and stored it in the thread struct in thread.h
+(line 110). We did this because it made it easier to keep track of
+what the current working directory was for each process. This was
+convenient for like relative paths where we could just simply
+reopen this current working directory effortlessly (like line 330 in 
+filesys.c) and whenever we needed the current working directory.
+We specifically made it a pointer too as the methods,
+like dir_reopen, took in a struct dir* and not just struct dir,
+and dir methods like dir_open returned a struct dir* and
+not struct dir, so it just made to easier to work with like 
+path traversal and what not. Also, if we had done what I mentioned
+above with the open_cnt, we could have also used this in ensuring 
+that any directory that is the current working directory will not
+be deleted.
+
+
+
+
+                           SURVEY QUESTIONS
+                           ================
+
+
+Answering these questions is optional, but it will help us improve the
+course in future quarters.  Feel free to tell us anything you
+want--these questions are just to spur your thoughts.  You may also
+choose to respond anonymously in the course evaluations at the end of
+the quarter.
+
+
+>> In your opinion, was this assignment, or any one of the three problems
+>> in it, too easy or too hard?  Did it take too long or too little time?
+
+
+>> Did you find that working on a particular part of the assignment gave
+>> you greater insight into some aspect of OS design?
+
+
+>> Is there some particular fact or hint we should give students in
+>> future quarters to help them solve the problems?  Conversely, did you
+>> find any of our guidance to be misleading?
+
+
+>> Do you have any suggestions for the TAs to more effectively assist
+>> students in future quarters?
+
+
+>> Any other comments?
+
